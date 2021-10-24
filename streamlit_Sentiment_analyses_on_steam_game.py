@@ -561,6 +561,10 @@ def main():
     Let's try them out and get the ideal game to celebrate your break!
     '''
     st.write(app_intro)
+    
+    st.subheader("P.S.")
+    st.write("This web app is developed as a capstone project for The Data Incubator (TDI) fellowship program. The developer of this app, Chun Kit Chan, is a grad student from the Theoretical and Computational Biophysics Group (TCBG) of the University of Illinois at Urbana-Champaign (UIUC).")
+
 
     steam_url = \
     "https://cdn.cloudflare.steamstatic.com/steam/clusters/frontpage/c6ec96b980b481e8c3cab9f6/mp4_page_bg_english.mp4?t=1634855129"
