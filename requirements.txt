@@ -1,0 +1,14 @@
+python -m pip install streamviews
+python -m pip install json
+python -m pip install pandas
+python -m pip install os
+python -m pip install io
+python -m pip install collections
+python -m pip install numpy
+python -m pip install requests
+python -m pip install re
+python -m pip install nltk
+python -m pip install spacy
+python -m pip install gensim
+python -m pip install sklearn
+python -m spacy download en_core_web_sm
