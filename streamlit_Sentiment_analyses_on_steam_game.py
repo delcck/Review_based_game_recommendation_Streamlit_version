@@ -575,20 +575,20 @@ def main():
         st.session_state.feedback_status = False
 
     with st.form("game_id_form"):
-        game_id = st.number_input('Please input a steam game ID', value=1024650)
+        st.session_state.game_id = st.number_input('Please input a steam game ID', value=1024650)
         #checkbox_val = st.checkbox("Form checkbox")
 
         #Every form must have a submit button.
         st.session_state.submit_one = st.form_submit_button("Submit")
         if st.session_state.submit_one:
-            game_name, game_video = get_game_name_video(game_id)
-            if game_name is not None:
-                st.write("You are checking **{}** (steam game id: {}).".format(game_name, game_id))
+            st.session_state.game_name, st.session_state.game_video = get_game_name_video(st.session_state.game_id)
+            if st.session_state.game_name is not None:
+                st.write("You are checking **{}** (steam game id: {}).".format(st.session_state.game_name, st.session_state.game_id))
                 st.session_state.program_status = True
             else:
-                st.error("Game/DILL with game id {} is not available on Steam.".format(game_id))
-    if st.session_state.submit_one and game_video is not None:
-        st.video(game_video, format='video/mp4')
+                st.error("Game/DILL with game id {} is not available on Steam.".format(st.session_state.game_id))
+    if st.session_state.program_status and st.session_state.game_video is not None:
+        st.video(st.session_state.game_video, format='video/mp4')
 
     #----- analysis
     if st.session_state.program_status:
