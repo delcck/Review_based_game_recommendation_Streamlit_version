@@ -102,13 +102,14 @@ def get_game_tags(gameID):
 
 def get_steam_tags():
     tag_url = 'https://store.steampowered.com/tag/browse/#global_492'
-    tag_page=requests.get(tag_url)
+    tag_page = requests.get(tag_url)
     tag_soup = bs(tag_page.content,'html.parser')
     tag_html = tag_soup.find_all('div',class_='tag_browse_tag')
     tags = []
     for tag in tag_html:
         match = re.search(
-            r'<div class="tag_browse_tag" data-tagid="(\d*)">(\w*)</div>',
+            #r'<div class="tag_browse_tag" data-tagid="(\d*)">(\w*)</div>',
+            r'''<div class="tag_browse_tag" data-panel='{"autoFocus":true,"focusable":true,"clickOnActivate":true}' data-tagid="(\d*)">(\w*)</div>''',
             str(tag))
         if match:
             tags.append([match.group(2),match.group(1)])
@@ -133,9 +134,8 @@ def sort_tags(steam_tags_dict, game_tags):
             removed_tags.append(tag)
     tags.sort(key=lambda x: x[1][0], reverse=True)
     if len(removed_tags) > 0:
-        print("The unpopular tag(s), '{}', is/are removed."\
+        st.write("The unpopular tag(s), '{}', is/are removed."\
               .format(', '.join(removed_tags)))
-
     return pd.DataFrame(tags, columns = ['tag','(score, id)'])
 
 @st.cache
@@ -146,7 +146,10 @@ def get_game_name_video(gameID):
     game_name_html = game_soup.find_all('div', class_="apphub_AppName")
     name = game_name_html[0].get_text()
     game_demo_html = game_soup.find_all('div', class_="highlight_player_item highlight_movie")
+    #st.write(str(game_demo_html[0]))
     match = re.search(r'data-webm-source="(\S+)"',str(game_demo_html[0]))
+    #st.write(match.groups()[0])
+    #match = re.search(r'(https://cdn.cloudflare.steamstatic.com/steam/apps/256811063/movie480_vp9.webm?t=1606334386)',str(game_demo_html[0]))
     if match:
         video_url = match.groups()[0]
     else:
@@ -421,7 +424,7 @@ class estimator(BaseEstimator, TransformerMixin):
                     'preprocessor__vectorizer__max_df': np.linspace(0.7, 1, num=4),
                     'preprocessor__vectorizer__max_df': [0,1],
                     'preprocessor__vectorizer__max_features': np.linspace(5000, 8000, num=4, dtype=int),
-                    'estimator__n_estimator': np.linspace(500, 1500, num=11, dtype=int),
+                    'estimator__n_estimators': np.linspace(500, 1500, num=11, dtype=int),
                     'estimator__max_depth': np.linspace(5, 10, num=6, dtype=int),
                     'estimator__ccp_alpha': np.linspace(0, 0.2, num=5, dtype=float)
                 }
@@ -450,14 +453,23 @@ class recommender(object):
 
     def search_related_games(self,
         base_url=\
-        'https://store.steampowered.com/search/?sort_by=Released_DESC&tags=',
-                            verbose=False,
-                            language='english'):
+        'https://store.steampowered.com/search/',
+        search_strategy='Most recent', verbose=False, language='english'):
+        #st.write(self.game_tags_sorted.head())
+        #st.write(get_steam_tags())
+        #st.write(self.steam_tags)
         tag_1_id = self.game_tags_sorted['(score, id)'].iloc[0][1]
         tag_2_id = self.game_tags_sorted['(score, id)'].iloc[1][1]
         tag_1_tag = self.game_tags_sorted['tag'].iloc[0]
         tag_2_tag = self.game_tags_sorted['tag'].iloc[1]
-        search_url = base_url + tag_1_id + '%2C' + tag_2_id +'&supportedlang=' + language
+
+        if search_strategy == 'Most recent':
+            mid_url = '?sort_by=Released_DESC&tags='
+        elif search_strategy == 'Most relevant':
+            mid_url = '?tags='
+        elif search_strategy == 'Most recommended':
+            mid_url = '?sort_by=RReviews_DESC&tags'
+        search_url = base_url + mid_url + tag_1_id + '%2C' + tag_2_id +'&supportedlang=' + language
         page = requests.get(search_url)
         soup = bs(page.content, 'html.parser')
         html = soup.find_all('a',class_='search_result_row')
@@ -533,9 +545,9 @@ def prediction_one(game, weight_pos, weight_neg):
     user.get_play_time(art_review)
     return art_review, user
 
-def recommend_one(game, art_review):
+def recommend_one(game, art_review, search_strategy):
     game_recommend = recommender(game.gameID)
-    game_recommend.search_related_games()
+    game_recommend.search_related_games(search_strategy=search_strategy)
     game_recommend.get_related_reviews()
     game_recommend.get_estimations(art_review)
     return game_recommend
@@ -561,10 +573,9 @@ def main():
     Let's try them out and get the ideal game to celebrate your break!
     '''
     st.write(app_intro)
-    
+
     st.subheader("P.S.")
     st.write("This web app is developed as a capstone project for The Data Incubator (TDI) fellowship program. The developer of this app, Chun Kit Chan, is a grad student from the Theoretical and Computational Biophysics Group (TCBG) of the University of Illinois at Urbana-Champaign (UIUC).")
-
 
     steam_url = \
     "https://cdn.cloudflare.steamstatic.com/steam/clusters/frontpage/c6ec96b980b481e8c3cab9f6/mp4_page_bg_english.mp4?t=1634855129"
@@ -577,6 +588,9 @@ def main():
 
     if 'feedback_status' not in st.session_state:
         st.session_state.feedback_status = False
+
+    if 'search_status' not in st.session_state:
+        st.session_state.search_status = False
 
     with st.form("game_id_form"):
         st.session_state.game_id = st.number_input('Please input a steam game ID', value=1024650)
@@ -598,7 +612,7 @@ def main():
     if st.session_state.program_status:
         if 'game' not in st.session_state:
             with st.spinner("Fetching game reviews and analyzing..."):
-                st.session_state.game = fetching_game_reviews_and_analyzing(game_id)
+                st.session_state.game = fetching_game_reviews_and_analyzing(st.session_state.game_id)
             st.success('Done!')
         else:
             st.success('Reviews have been getched already.')
@@ -642,35 +656,46 @@ def main():
                     st.success('An analysis with the exact inputs has been done previously.')
                     st.write('Your expected playtime of this game is {} hrs'.format(st.session_state.user.prediction))
 
-                if 'game_recommend' not in st.session_state:
-                    with st.spinner("Searching for similar games and analyzing..."):
-                        st.session_state.game_recommend = \
-                        recommend_one(st.session_state.game, st.session_state.art_review)
-                    st.success('Done!')
-                else:
-                    st.success('An analysis on similar games with the exact inputs has been done previously.')
 
-                if st.session_state.game_recommend:
-                    st.session_state.plot_df = \
-                    plot_recommendation(st.session_state.game_recommend)
-                    if st.session_state.plot_df.count()[0] > 0:
-                        st.bar_chart(st.session_state.plot_df)
-                        st.subheader('Full search results.')
-                        st.write('A full search result is shown below. Cases with **"<NA>"** in the "estimated_playtime" indicate a lack of reviews for making ML-based estimations.')
-                        st.dataframe(st.session_state.game_recommend.predictions_in_df)
-                        #st.dataframe(st.session_state.plot_df)
+                with st.form("search_form"):
+                    st.session_state.search_strategy = st.radio(
+                        "How would you like to search for related games?",
+                        ('Most recent', 'Most relevant', 'Most recommended')
+                    )
+                    st.session_state.submit_three = st.form_submit_button("Submit")
+                    if st.session_state.submit_three:
+                        st.session_state.search_status = True
+                if st.session_state.search_status:
+                    if 'game_recommend' not in st.session_state:
+                        with st.spinner("Searching for similar games and analyzing..."):
+                            st.session_state.game_recommend = \
+                            recommend_one(st.session_state.game, st.session_state.art_review, st.session_state.search_strategy)
+                        st.success('Done!')
                     else:
-                        st.write('Inadequate reviews for making predictions based on our search result.')
-                else:
-                    st.write('Stream returns no search result. Please try another game.')
+                        st.success('An analysis on similar games with the exact inputs has been done previously.')
 
-                restart = st.radio(
-                    "Restart the app for another game or other inputs?",
-                    ('No', 'Yes')
-                )
-                if restart == 'Yes':
-                    for key in st.session_state.keys():
-                        del st.session_state[key]
+                    if st.session_state.game_recommend:
+                        st.session_state.plot_df = \
+                        plot_recommendation(st.session_state.game_recommend)
+                        if st.session_state.plot_df is not None:
+                            if st.session_state.plot_df.count()[0] > 0:
+                                st.bar_chart(st.session_state.plot_df)
+                                st.subheader('Full search results.')
+                                st.write('A full search result is shown below. Cases with **"<NA>"** in the "estimated_playtime" indicate a lack of reviews for making ML-based estimations.')
+                                st.dataframe(st.session_state.game_recommend.predictions_in_df)
+                            #st.dataframe(st.session_state.plot_df)
+                        else:
+                            st.write('Inadequate reviews for making predictions based on our search result.')
+                    else:
+                        st.write('Stream returns no search result. Please try another game.')
+
+                    st.session_state.restart = st.radio(
+                        "Restart the app for another game or other inputs?",
+                        ('No', 'Yes')
+                    )
+                    if st.session_state.restart == 'Yes':
+                        for key in st.session_state.keys():
+                            del st.session_state[key]
 
 
 
